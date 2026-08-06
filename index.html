@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+  />
+  <title>Wedding Passport</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    :root {
+      --page-width: 440px;
+      --page-height: 775px;
+      --stage-max-width: 920px;
+      --stage-max-height: 800px;
+      --background: #d8d2c8;
+      --paper: #f6f0e5;
+      --green: #1b3428;
+      --gold: #efdca8;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--background);
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+        "Noto Sans KR", sans-serif;
+      touch-action: none;
+    }
+
+    /* 전체 책 무대 */
+    .book-stage {
+      position: relative;
+      width: min(96vw, var(--stage-max-width));
+      height: min(94vh, var(--stage-max-height));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /*
+      표지 상태에서는 PageFlip이 책을 오른쪽 절반에 배치하므로
+      전체 책을 왼쪽으로 이동시켜 표지를 화면 정중앙에 둡니다.
+      표지를 넘기면 opened 클래스가 붙으며 양면 펼침이 중앙으로 옵니다.
+    */
+    .book-positioner {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: translateX(-25%);
+      transition: transform 700ms cubic-bezier(.22, .75, .25, 1);
+      will-change: transform;
+    }
+
+    .book-positioner.opened {
+      transform: translateX(0);
+    }
+
+    #book {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 페이지 공통 */
+    .page {
+      position: relative;
+      overflow: hidden;
+      background: var(--paper);
+      border-radius: 11px;
+      backface-visibility: hidden;
+      transform: translateZ(0);
+    }
+
+    .page img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+      object-position: center;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-user-drag: none;
+      pointer-events: none;
+    }
+
+    /* 두꺼운 첫 표지 */
+    .cover-page {
+      background: #183126;
+      border-radius: 17px;
+      box-shadow:
+        0 7px 18px rgba(20, 29, 23, 0.28),
+        0 18px 42px rgba(20, 29, 23, 0.20);
+    }
+
+    .cover-page::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      box-shadow:
+        inset -8px 0 12px rgba(0, 0, 0, 0.20),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+      pointer-events: none;
+    }
+
+    /* 책 아래 그림자 */
+    .book-shadow {
+      position: absolute;
+      z-index: -1;
+      left: 11%;
+      right: 11%;
+      bottom: 0;
+      height: 5%;
+      border-radius: 50%;
+      background: rgba(45, 39, 32, 0.23);
+      filter: blur(19px);
+      pointer-events: none;
+    }
+
+    /* 음악 버튼 */
+    #music-button {
+      position: fixed;
+      z-index: 1000;
+      top: max(16px, env(safe-area-inset-top));
+      right: 18px;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: 1px solid rgba(238, 214, 161, 0.42);
+      border-radius: 50%;
+      color: var(--gold);
+      background: rgba(26, 49, 37, 0.88);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      box-shadow: 0 5px 16px rgba(0, 0, 0, 0.20);
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #music-button.playing {
+      animation: musicPulse 1.8s ease-in-out infinite;
+    }
+
+    @keyframes musicPulse {
+      0%, 100% {
+        box-shadow:
+          0 5px 16px rgba(0, 0, 0, 0.20),
+          0 0 0 0 rgba(228, 199, 132, 0);
+      }
+      50% {
+        box-shadow:
+          0 5px 16px rgba(0, 0, 0, 0.20),
+          0 0 0 7px rgba(228, 199, 132, 0.15);
+      }
+    }
+
+    /* 첫 안내 */
+    .page-guide {
+      position: fixed;
+      z-index: 900;
+      left: 50%;
+      bottom: max(14px, env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      padding: 9px 15px;
+      border-radius: 999px;
+      color: #fff;
+      background: rgba(27, 47, 36, 0.78);
+      font-size: 13px;
+      white-space: nowrap;
+      pointer-events: none;
+      animation: guidePulse 1.6s ease-in-out infinite;
+      transition: opacity .35s ease, visibility .35s ease;
+    }
+
+    .page-guide.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    @keyframes guidePulse {
+      0%, 100% { opacity: .55; }
+      50% { opacity: 1; }
+    }
+
+    /* 자동재생이 차단된 경우 */
+    #audio-guide {
+      position: fixed;
+      z-index: 950;
+      top: 70px;
+      right: 17px;
+      max-width: 180px;
+      padding: 8px 11px;
+      border-radius: 9px;
+      color: #fff;
+      background: rgba(31, 45, 37, .82);
+      font-size: 11px;
+      line-height: 1.45;
+      text-align: center;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity .3s ease, visibility .3s ease;
+    }
+
+    #audio-guide.show {
+      opacity: 1;
+      visibility: visible;
+    }
+
+
+    /* 이미지 위 투명 기능 버튼 */
+    .interactive-page {
+      position: relative;
+    }
+
+    .hotspot {
+      position: absolute;
+      z-index: 20;
+      display: block;
+      padding: 0;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    .hotspot:focus-visible {
+      outline: 3px solid rgba(27, 52, 40, .72);
+      outline-offset: -3px;
+      background: rgba(255, 255, 255, .12);
+    }
+
+    /* 위치 확인이 필요할 때만 아래 값을 0.18 정도로 바꾸세요. */
+    .hotspot-debug .hotspot {
+      background: rgba(255, 0, 0, 0);
+    }
+
+    /* 3번 페이지: 연락처·계좌·지도 */
+    .groom-phone   { left: 20%; top: 42%; width: 68%; height: 5.5%; }
+    .bride-phone   { left: 20%; top: 47.5%; width: 68%; height: 5.5%; }
+    .groom-account { left: 20%; top: 57%; width: 70%; height: 5.5%; }
+    .bride-account { left: 20%; top: 62.5%; width: 70%; height: 5.5%; }
+    .church-map    { left: 7%;  top: 69%; width: 47%; height: 26%; }
+    .parking-map   { left: 53%; top: 69%; width: 40%; height: 26%; }
+
+    /* 5번 페이지: 밀양 여행지 */
+    .map-yeongnamru { left: 5%;  top: 17%; width: 44%; height: 23%; }
+    .map-riverwalk  { left: 51%; top: 17%; width: 44%; height: 24%; }
+    .map-wiyangji   { left: 5%;  top: 39%; width: 45%; height: 24%; }
+    .map-twintunnel { left: 51%; top: 43%; width: 44%; height: 27%; }
+    .map-haecheon   { left: 5%;  top: 67%; width: 58%; height: 25%; }
+
+    /* 복사 완료 안내 */
+    #toast {
+      position: fixed;
+      z-index: 2000;
+      left: 50%;
+      bottom: max(24px, env(safe-area-inset-bottom));
+      transform: translate(-50%, 18px);
+      padding: 11px 16px;
+      border-radius: 999px;
+      color: #fff;
+      background: rgba(27, 52, 40, .93);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .22);
+      font-size: 13px;
+      white-space: nowrap;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity .24s ease, transform .24s ease, visibility .24s ease;
+    }
+
+    #toast.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translate(-50%, 0);
+    }
+
+    /* 휴대폰 */
+    @media (max-width: 650px) {
+      .book-stage {
+        width: 100vw;
+        height: 100svh;
+      }
+
+      .book-positioner,
+      .book-positioner.opened {
+        transform: translateX(0);
+      }
+
+      .page,
+      .cover-page {
+        border-radius: 0;
+      }
+
+      .book-shadow {
+        display: none;
+      }
+
+      #music-button {
+        top: max(12px, env(safe-area-inset-top));
+        right: 12px;
+      }
+
+      #audio-guide {
+        top: calc(max(12px, env(safe-area-inset-top)) + 52px);
+        right: 10px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- 배경음악: 마지막 페이지에서도 계속 반복됩니다. -->
+  <audio id="bgm" loop preload="auto" autoplay>
+    <source src="bgm.mp3" type="audio/mpeg" />
+  </audio>
+
+  <button
+    id="music-button"
+    type="button"
+    aria-label="배경음악 켜기"
+    title="배경음악 켜기 또는 끄기"
+  >
+    ♫
+  </button>
+
+  <div id="audio-guide">
+    음악 버튼을 누르면<br />
+    배경음악이 재생됩니다
+  </div>
+
+  <div id="toast" role="status" aria-live="polite">
+    복사되었습니다
+  </div>
+
+  <main class="book-stage">
+    <div class="book-positioner" id="book-positioner">
+      <div id="book">
+        <!-- 1번: 두꺼운 여권 표지 -->
+        <div class="page cover-page" data-density="hard">
+          <img
+            src="01_wedding_page_880x1550.png"
+            alt="모바일 청첩장 표지"
+          />
+        </div>
+
+        <!-- 2번 -->
+        <div class="page">
+          <img
+            src="02_wedding_page_880x1550.png"
+            alt="예식 초대 안내"
+          />
+        </div>
+
+        <!-- 3번: 연락처·계좌·지도 기능 -->
+        <div class="page interactive-page">
+          <img
+            src="03_wedding_page_880x1550.png"
+            alt="예식 정보 안내"
+          />
+
+          <a
+            class="hotspot groom-phone"
+            href="tel:01075470288"
+            aria-label="신랑 안세환에게 전화하기"
+            title="안세환에게 전화"
+          ></a>
+
+          <a
+            class="hotspot bride-phone"
+            href="tel:01045657966"
+            aria-label="신부 김설빈에게 전화하기"
+            title="김설빈에게 전화"
+          ></a>
+
+          <button
+            class="hotspot groom-account"
+            type="button"
+            data-copy="토스뱅크 1000-5524-9924 안세환"
+            aria-label="신랑 안세환 계좌번호 복사"
+            title="안세환 계좌번호 복사"
+          ></button>
+
+          <button
+            class="hotspot bride-account"
+            type="button"
+            data-copy="토스뱅크 1002-4129-6036 김설빈"
+            aria-label="신부 김설빈 계좌번호 복사"
+            title="김설빈 계좌번호 복사"
+          ></button>
+
+          <button
+            class="hotspot church-map"
+            type="button"
+            data-url="https://naver.me/GzdjmysP"
+            aria-label="밀양은혜교회 네이버 지도 열기"
+            title="밀양은혜교회 지도"
+          ></button>
+
+          <button
+            class="hotspot parking-map"
+            type="button"
+            data-url="https://naver.me/xl0eFGYS"
+            aria-label="강변 공영 주차장 네이버 지도 열기"
+            title="강변 공영 주차장 지도"
+          ></button>
+        </div>
+
+        <!-- 4번 -->
+        <div class="page">
+          <img
+            src="04_wedding_page_880x1550.png"
+            alt="청첩장 안내"
+          />
+        </div>
+
+        <!-- 5번: 밀양 여행지 지도 기능 -->
+        <div class="page interactive-page">
+          <img
+            src="05_wedding_page_880x1550.png"
+            alt="밀양 여행 안내"
+          />
+
+          <button
+            class="hotspot map-yeongnamru"
+            type="button"
+            data-url="https://naver.me/x8tpTBOx"
+            aria-label="영남루 네이버 지도 열기"
+            title="영남루 지도"
+          ></button>
+
+          <button
+            class="hotspot map-riverwalk"
+            type="button"
+            data-url="https://naver.me/F42M8Zvr"
+            aria-label="밀양강 산책길 네이버 지도 열기"
+            title="밀양강 산책길 지도"
+          ></button>
+
+          <button
+            class="hotspot map-wiyangji"
+            type="button"
+            data-url="https://naver.me/xExkN1Ga"
+            aria-label="위양지 네이버 지도 열기"
+            title="위양지 지도"
+          ></button>
+
+          <button
+            class="hotspot map-twintunnel"
+            type="button"
+            data-url="https://naver.me/5uIYtVe5"
+            aria-label="트윈터널 네이버 지도 열기"
+            title="트윈터널 지도"
+          ></button>
+
+          <button
+            class="hotspot map-haecheon"
+            type="button"
+            data-url="https://naver.me/xaTPQKWv"
+            aria-label="해천항일운동 테마거리 네이버 지도 열기"
+            title="해천항일운동 테마거리 지도"
+          ></button>
+        </div>
+
+        <!-- 6번 -->
+        <div class="page">
+          <img
+            src="06_wedding_page_880x1550.png"
+            alt="감사 인사"
+          />
+        </div>
+
+        <!-- 7번: 마지막 Thank you 페이지 -->
+        <div class="page last-page">
+          <img
+            src="07_wedding_page_880x1550.png"
+            alt="마지막 감사 페이지"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="book-shadow"></div>
+  </main>
+
+  <div class="page-guide">
+    페이지 가장자리를 잡고 넘겨주세요
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.min.js"></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const bookElement = document.getElementById("book");
+      const bookPositioner = document.getElementById("book-positioner");
+      const bgm = document.getElementById("bgm");
+      const musicButton = document.getElementById("music-button");
+      const pageGuide = document.querySelector(".page-guide");
+      const audioGuide = document.getElementById("audio-guide");
+      const toast = document.getElementById("toast");
+      const hotspots = document.querySelectorAll(".hotspot");
+      let toastTimer = null;
+
+      const bgmVolume = 0.24;
+      let musicStarted = false;
+      let userPausedMusic = false;
+      let audioGuideTimer = null;
+      let fadeTimer = null;
+
+      bgm.volume = bgmVolume;
+
+      const pageFlip = new St.PageFlip(bookElement, {
+        width: 440,
+        height: 775,
+
+        size: "stretch",
+        minWidth: 280,
+        maxWidth: 440,
+        minHeight: 493,
+        maxHeight: 775,
+
+        /* 표지는 단독, 넘긴 뒤 PC에서 양면 펼침 */
+        showCover: true,
+
+        /* 모바일에서는 자동 한 페이지 */
+        usePortrait: true,
+        autoSize: true,
+
+        drawShadow: true,
+        maxShadowOpacity: 0.36,
+
+        /* 두꺼운 표지가 묵직하게 넘어가도록 */
+        flippingTime: 980,
+
+        useMouseEvents: true,
+        mobileScrollSupport: false,
+        clickEventForward: true,
+        swipeDistance: 24,
+        showPageCorners: true,
+        disableFlipByClick: false
+      });
+
+      pageFlip.loadFromHTML(document.querySelectorAll(".page"));
+
+      function updateMusicButton(playing) {
+        if (playing) {
+          musicButton.textContent = "Ⅱ";
+          musicButton.classList.add("playing");
+          musicButton.setAttribute("aria-label", "배경음악 끄기");
+        } else {
+          musicButton.textContent = "♫";
+          musicButton.classList.remove("playing");
+          musicButton.setAttribute("aria-label", "배경음악 켜기");
+        }
+      }
+
+      function showAudioGuide() {
+        if (musicStarted || userPausedMusic) return;
+
+        audioGuide.classList.add("show");
+
+        if (audioGuideTimer) {
+          clearTimeout(audioGuideTimer);
+        }
+
+        audioGuideTimer = setTimeout(function () {
+          audioGuide.classList.remove("show");
+        }, 3500);
+      }
+
+      async function startMusic() {
+        if (userPausedMusic) return false;
+
+        try {
+          if (fadeTimer) {
+            clearInterval(fadeTimer);
+          }
+
+          bgm.volume = 0.02;
+          await bgm.play();
+
+          musicStarted = true;
+          updateMusicButton(true);
+          audioGuide.classList.remove("show");
+
+          let step = 0;
+          const totalSteps = 20;
+
+          fadeTimer = setInterval(function () {
+            step += 1;
+            bgm.volume = Math.min(
+              bgmVolume,
+              bgmVolume * (step / totalSteps)
+            );
+
+            if (step >= totalSteps) {
+              bgm.volume = bgmVolume;
+              clearInterval(fadeTimer);
+              fadeTimer = null;
+            }
+          }, 70);
+
+          return true;
+        } catch (error) {
+          musicStarted = false;
+          updateMusicButton(false);
+          showAudioGuide();
+          return false;
+        }
+      }
+
+      function pauseMusic() {
+        if (fadeTimer) {
+          clearInterval(fadeTimer);
+          fadeTimer = null;
+        }
+
+        bgm.pause();
+        userPausedMusic = true;
+        updateMusicButton(false);
+      }
+
+      /* 페이지 열자마자 자동재생 시도 */
+      startMusic();
+
+      /*
+        Safari/Chrome이 자동재생을 막으면
+        첫 터치 또는 첫 페이지 넘김 때 다시 시도합니다.
+      */
+      document.addEventListener(
+        "pointerdown",
+        async function firstInteraction() {
+          if (!musicStarted && !userPausedMusic) {
+            await startMusic();
+          }
+        },
+        { once: true, passive: true }
+      );
+
+      musicButton.addEventListener("click", async function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (bgm.paused) {
+          userPausedMusic = false;
+          await startMusic();
+        } else {
+          pauseMusic();
+        }
+      });
+
+      pageFlip.on("flip", async function (event) {
+        const currentPage = Number(event.data);
+
+        pageGuide.classList.add("hidden");
+
+        /*
+          표지를 넘기면 양면 펼침이 중앙에 오고,
+          다시 표지로 돌아오면 표지가 정중앙으로 복귀합니다.
+        */
+        if (currentPage > 0) {
+          bookPositioner.classList.add("opened");
+        } else {
+          bookPositioner.classList.remove("opened");
+        }
+
+        /*
+          마지막 Thank you 페이지를 눌러도 음악은 멈추지 않습니다.
+          사용자가 음악 버튼을 직접 누른 경우에만 정지됩니다.
+        */
+        if (bgm.paused && !userPausedMusic) {
+          await startMusic();
+        }
+      });
+
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add("show");
+
+        if (toastTimer) {
+          clearTimeout(toastTimer);
+        }
+
+        toastTimer = setTimeout(function () {
+          toast.classList.remove("show");
+        }, 2200);
+      }
+
+      async function copyText(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          showToast("계좌번호가 복사되었습니다");
+        } catch (error) {
+          const textarea = document.createElement("textarea");
+          textarea.value = text;
+          textarea.setAttribute("readonly", "");
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          textarea.remove();
+          showToast("계좌번호가 복사되었습니다");
+        }
+      }
+
+      /*
+        투명 버튼을 누를 때 페이지가 함께 넘어가지 않도록
+        포인터 이벤트의 전파를 막습니다.
+      */
+      hotspots.forEach(function (hotspot) {
+        ["pointerdown", "mousedown", "touchstart"].forEach(function (eventName) {
+          hotspot.addEventListener(eventName, function (event) {
+            event.stopPropagation();
+          }, { passive: false });
+        });
+
+        hotspot.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+
+          const copyValue = hotspot.dataset.copy;
+          const url = hotspot.dataset.url;
+          const href = hotspot.getAttribute("href");
+
+          if (copyValue) {
+            copyText(copyValue);
+            return;
+          }
+
+          if (url) {
+            window.open(url, "_blank", "noopener,noreferrer");
+            return;
+          }
+
+          if (href && href.startsWith("tel:")) {
+            window.location.href = href;
+          }
+        });
+      });
+
+      /* 방향키 */
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "ArrowRight") {
+          pageFlip.flipNext();
+        }
+
+        if (event.key === "ArrowLeft") {
+          pageFlip.flipPrev();
+        }
+      });
+
+      /*
+        다른 탭으로 이동하면 브라우저가 음악을 일시 중단할 수 있습니다.
+        다시 돌아왔을 때 사용자가 직접 끄지 않았다면 재생을 복구합니다.
+      */
+      document.addEventListener("visibilitychange", function () {
+        if (
+          !document.hidden &&
+          musicStarted &&
+          !userPausedMusic &&
+          bgm.paused
+        ) {
+          bgm.play()
+            .then(function () {
+              bgm.volume = bgmVolume;
+              updateMusicButton(true);
+            })
+            .catch(function () {
+              updateMusicButton(false);
+            });
+        }
+      });
+    });
+  </script>
+</body>
+</html>
